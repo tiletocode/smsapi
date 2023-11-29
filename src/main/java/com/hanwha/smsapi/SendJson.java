@@ -32,19 +32,26 @@ public class SendJson {
     public void send(WebhookDto dto) throws IOException {
         Config config = Config.getConfig();
 
-        int pcode = dto.getPcode();
-        String token = config.getString("admin.token", "NDQ6LLNY4WDXVI6120WE");
-        String collector = config.getString("server.collector.address", "http://158.247.198.153:8080");
+        String apiUrl = config.getString("webhook.endpoint.url", "https://webhook.site/");
+        URL url = new URL(apiUrl);
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+
+        // int pcode = dto.getPcode();
+        // String token = config.getString("admin.token", "NDQ6LLNY4WDXVI6120WE");
+        // String collector = config.getString("server.collector.address",
+        // "http://158.247.198.153:8080");
 
         // 수집서버 API PULL
-        HttpClient HttpClient = HttpClients.createDefault();
-        String memberListUrl = collector + "/open/api/json/project/" + pcode + "/members";
-        HttpGet httpGet = new HttpGet(memberListUrl);
-        httpGet.addHeader(new BasicHeader("x-whatap-token", token));
+        // HttpClient HttpClient = HttpClients.createDefault();
+        // String memberListUrl = collector + "/open/api/json/project/" + pcode +
+        // "/members";
+        // HttpGet httpGet = new HttpGet(memberListUrl);
+        // httpGet.addHeader(new BasicHeader("x-whatap-token", token));
 
-        HttpResponse response = HttpClient.execute(httpGet);
-        HttpEntity entity = response.getEntity();
-        String jsonResponse = EntityUtils.toString(entity);
+        // HttpResponse response = HttpClient.execute(httpGet);
+        // HttpEntity entity = response.getEntity();
+        // String jsonResponse = EntityUtils.toString(entity);
+        String jsonResponse = "{\"data\":[{\"email\":\"admin@whatap.io\",\"name\":\"관리자\",\"sms\":\"010-000-0000\", \"name2\":\"\"},{\"email\":\"1355753@hanwha.com\",\"name\":\"장진우\",\"sms\":\"010-3339-2364\", \"name2\":\"\"},{\"email\":\"1277941@hanwha.com\",\"name\":\"홍길동\",\"sms\":\"01030006000\"}, \"name2\":\"\"],\"total\":3}";
 
         // Header 정의
         String trnmSysCode = config.getString("trnm.sys.code", "APW");
@@ -65,34 +72,44 @@ public class SendJson {
         String ntfcTmplCode = config.getString("ntfc.template.code", "ACP00061");
 
         // 사번, digits 추출
-        ObjectMapper digitsObjectMapper = new ObjectMapper();
-        JsonNode jsonNode = digitsObjectMapper.readTree(jsonResponse);
+        ObjectMapper smsObjectMapper = new ObjectMapper();
+        JsonNode jsonNode = smsObjectMapper.readTree(jsonResponse);
         JsonNode dataArray = jsonNode.get("data");
-        String[] digitsArray = new String[dataArray.size()];
-        String[] addInfoArray = new String[dataArray.size()];
-
-        String apiUrl = config.getString("webhook.endpoint.url", "https://webhook.site/");
-        URL url = new URL(apiUrl);
-        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
 
         for (int i = 0; i < dataArray.size(); i++) {
+            String hpTlphTlcmNo = "";
+            String hpTlphOfno = "";
+            String hpTlphSbno = "";
+
             JsonNode dataItem = dataArray.get(i);
-            String digitsValue = dataItem.get("digits").asText();
-            String addInfoValue = dataItem.get("addInfo").asText();
-            digitsArray[i] = digitsValue;
-            addInfoArray[i] = addInfoValue;
+            String sms = dataItem.get("sms").asText();
+            String account = dataItem.get("email").asText();
+            //현재 전달받은 json스펙에는 header에 사번항목이 있음. 필수값 아님.
+            String emnb = account.substring(0, account.indexOf('@'));
+
+            // 하이픈 기준으로 전화번호 분리 후 저장
+            String[] parts = sms.split("-");
+            if (parts.length == 3) {
+                hpTlphTlcmNo = parts[0];
+                hpTlphOfno = parts[1];
+                hpTlphSbno = parts[2];
+            } else {
+                // 하이픈이 없으면 3-4-4 자리로 끊어서 저장
+                hpTlphTlcmNo = parts[0].substring(0, 3);
+                hpTlphOfno = parts[0].substring(3, 7);
+                hpTlphSbno = parts[0].substring(7);
+            }
 
             connection.setRequestMethod("POST");
             connection.setRequestProperty("Content-Type", "application/json");
 
-            //매번 새 값이 필요한 Header
+            // 매번 새 값이 필요한 Header
             LocalDateTime currentTime = LocalDateTime.now();
             String tlgrCertDttm = currentTime.format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS"));
             int randomNum = new Random().nextInt(9999);
             String rndmNo = String.format("%04d", randomNum);
 
-            //매번 새 값이 필요한 Payload
-            
+            // 매번 새 값이 필요한 Payload
 
             // Header 추가
             connection.setRequestProperty("trnmSysCode", trnmSysCode);
@@ -106,6 +123,7 @@ public class SendJson {
             connection.setRequestProperty("rcveSysCode", rcveSysCode);
             connection.setRequestProperty("serverType", serverType);
             connection.setRequestProperty("rspnDvsnCode", rspnDvsnCode);
+            connection.setRequestProperty("emnb", emnb);
 
             connection.setDoOutput(true);
 
@@ -115,6 +133,8 @@ public class SendJson {
             payloadMap.put("jobMsgeCntn", jobMsgeCntn);
             payloadMap.put("sndeDeptCode", sndeDeptCode);
             payloadMap.put("ntfcTmplCode", ntfcTmplCode);
+            payloadMap.put("hpTlphTlcmNo", hpTlphTlcmNo);
+            payloadMap.put("hpTlphOfno", hpTlphOfno);
 
             // Map -> JSON
             String jsonPayload = objectMapper.writeValueAsString(payloadMap);
