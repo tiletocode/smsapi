@@ -28,7 +28,6 @@ public class WebhookController {
     @PostMapping("${webhook.server.uri:/webhook}")
     public ResponseEntity<String> webhook(@RequestBody WebhookDto dto) throws IOException {
         dto.nullReplace(dto);
-
         SendJson sj = new SendJson();
         sj.send(dto);
         return new ResponseEntity<>("Receive Complete.", HttpStatus.OK);
