@@ -31,10 +31,10 @@ public class SendJson {
     public void send(WebhookDto dto) throws IOException {
         
         Config config = Config.getConfig();
-
         String apiUrl = config.getString("webhook.endpoint.url", "https://webhook.site/");
-        URL url = new URL(apiUrl);
-        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        
+        // URL url = new URL(apiUrl);
+        // HttpURLConnection connection = (HttpURLConnection) url.openConnection();
 
         int pcode = dto.getPcode();
         String token = config.getString("admin.token", "2DHTY8Z7FRDFNC8JVKEJ");
@@ -42,12 +42,12 @@ public class SendJson {
                 "http://10.253.248.90:8080");
 
         // 수집서버 API PULL
-        HttpClient HttpClient = HttpClients.createDefault();
+        HttpClient httpClient = HttpClients.createDefault();
         String memberListUrl = collector + "/open/api/json/project/" + pcode + "/members";
         HttpGet httpGet = new HttpGet(memberListUrl);
         httpGet.addHeader(new BasicHeader("x-whatap-token", token));
 
-        HttpResponse response = HttpClient.execute(httpGet);
+        HttpResponse response = httpClient.execute(httpGet);
         HttpEntity entity = response.getEntity();
         String whatapResponse = EntityUtils.toString(entity);
 
@@ -61,27 +61,6 @@ public class SendJson {
         String rcveSysCode = config.getString("header.rcvesyscode", "INI");
         String serverType = config.getString("header.servertype", "D");
         String rspnDvsnCode = config.getString("reqorresp.code", "S");
-
-        // Optional Key
-        String ctfnTokn = "";
-        String ogtsTrnnNo = "";
-        String mciNodeNo = "";
-        String mciSesnId = "";
-        String extlDvsnCode = "";
-        String emnb = "";
-        String belnOrgnCode = "";
-        String custId = "";
-        String chnlTypeCode = "";
-        String scrnId = "";
-        String befoScrnId = "";
-        String userTmunIdnfVal = "";
-        String rqsrIp = "";
-        String rqstDttm = "";
-        String baseCrny = "";
-        String baseCnty = "";
-        String baseLang = "";
-        String tscsRqstVal = "";
-        String postfixSysCode = "";
 
         // Payload 정의
         String sendCont = "1";
@@ -99,6 +78,11 @@ public class SendJson {
         String dutySendYn = config.getString("dutysendyn", "Y");
 
         // sms 추출
+        HttpURLConnection connection = (HttpURLConnection) new URL(apiUrl).openConnection();
+        connection.setRequestMethod("POST");
+        connection.setRequestProperty("Content-Type", "application/json");
+        // 반복호출허용
+        connection.setDoOutput(true);
         try {
             // 본문용
             ObjectMapper dataObjectMapper = new ObjectMapper();
@@ -110,13 +94,8 @@ public class SendJson {
             List<String> smsList = extractSms(smsJsonNode);
             String[] smsArray = smsList.toArray(new String[smsList.size()]);
             
-            connection.setRequestMethod("POST");
-            connection.setRequestProperty("Content-Type", "application/json");
-            // 반복호출허용
-            connection.setDoOutput(true);
-
             for (String sms : smsArray) {
-
+                try (OutputStream os = connection.getOutputStream()) {
                 // 매 건 새 값이 필요한 Header
                 LocalDateTime currentTime = LocalDateTime.now();
                 int randomNum = new Random().nextInt(9999);
@@ -154,27 +133,6 @@ public class SendJson {
                 headerNode.put("serverType", serverType);
                 headerNode.put("rspnDvsnCode", rspnDvsnCode);
 
-                // Header(Optional)
-                headerNode.put("ctfnTokn", ctfnTokn);
-                headerNode.put("ogtsTrnnNo", ogtsTrnnNo);
-                headerNode.put("mciNodeNo", mciNodeNo);
-                headerNode.put("mciSesnId", mciSesnId);
-                headerNode.put("extlDvsnCode", extlDvsnCode);
-                headerNode.put("emnb", emnb);
-                headerNode.put("belnOrgnCode", belnOrgnCode);
-                headerNode.put("custId", custId);
-                headerNode.put("chnlTypeCode", chnlTypeCode);
-                headerNode.put("scrnId", scrnId);
-                headerNode.put("befoScrnId", befoScrnId);
-                headerNode.put("userTmunIdnfVal", userTmunIdnfVal);
-                headerNode.put("rqsrIp", rqsrIp);
-                headerNode.put("rqstDttm", rqstDttm);
-                headerNode.put("baseCrny", baseCrny);
-                headerNode.put("baseCnty", baseCnty);
-                headerNode.put("baseLang", baseLang);
-                headerNode.put("tscsRqstVal", tscsRqstVal);
-                headerNode.put("postfixSysCode", postfixSysCode);
-
                 dataJsonNode.set("header", headerNode);
 
                 // Payload 삽입
@@ -199,18 +157,19 @@ public class SendJson {
                 dataJsonNode.set("payload", payloadNode);
 
                 String finalOutput = dataJsonNode.toPrettyString();
-                try (OutputStream os = connection.getOutputStream()) {
-                    byte[] input = finalOutput.getBytes(StandardCharsets.UTF_8);
-                    os.write(input, 0, input.length);
-                }
+                byte[] input = finalOutput.getBytes(StandardCharsets.UTF_8);
+                os.write(input, 0, input.length);
                 int responseCode = connection.getResponseCode();
                 log.info("HTTP STATUS: " + responseCode);
+                log.info(finalOutput);
+            } catch (Exception e) {
+                e.printStackTrace();
             }
-        } catch (Exception e) {
-            e.printStackTrace();
-        } 
+        }
+    } finally {
         connection.disconnect();
     }
+}
 
     private static List<String> extractSms(JsonNode smsJsonNode) {
         List<String> smsList = new ArrayList<>();
