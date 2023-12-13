@@ -1,55 +1,88 @@
 package com.hanwha.smsapi;
 
 import java.io.IOException;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpResponse;
-import org.apache.http.client.HttpClient;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.impl.client.HttpClients;
-import org.apache.http.message.BasicHeader;
-import org.apache.http.util.EntityUtils;
-
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-
 import lombok.extern.slf4j.Slf4j;
+import okhttp3.ConnectionPool;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
+import okhttp3.logging.HttpLoggingInterceptor;
 
 @Slf4j
 public class SendJson {
 
-    public void send(WebhookDto dto) throws IOException {
-        
-        Config config = Config.getConfig();
-        String apiUrl = config.getString("webhook.endpoint.url", "https://webhook.site/");
-        
-        // URL url = new URL(apiUrl);
-        // HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+    private Config config = Config.getConfig();
+    private final String token = config.getString("admin.token", "2DHTY8Z7FRDFNC8JVKEJ");
+    private final String collector = config.getString("server.collector.address", "http://10.253.248.90:8080");
+
+    private final OkHttpClient okHttpClient;
+    private ConnectionPool cPool = new ConnectionPool(50, 1L, java.util.concurrent.TimeUnit.MINUTES);
+    private String loggingLevel = config.getString("okhttp.logging.level", "NONE");
+    private HttpLoggingInterceptor.Level logLevel = HttpLoggingInterceptor.Level.valueOf(loggingLevel);
+
+    public SendJson() {
+
+        // 생성자에서 OkHttpClient를 초기화
+        this.okHttpClient = new OkHttpClient.Builder()
+                .addInterceptor(new HttpLoggingInterceptor().setLevel(logLevel))
+                .connectionPool(cPool)
+                .build();
+    }
+
+    private List<String> getReceiversByGroupId(String groupId) throws IOException{
+        List<String> result = new ArrayList<String>();
+        String groupListUrl = collector + "/open/api/json/group/" + groupId + "/members";
+        Request httpGetRequest = new Request.Builder()
+                .url(groupListUrl)
+                .addHeader("x-whatap-token", token)
+                .build();
+        Response okHttpResponse = okHttpClient.newCall(httpGetRequest).execute();
+        String whatapResponse = okHttpResponse.body().string();
+        ObjectMapper smsObjectMapper = new ObjectMapper();
+        JsonNode smsJsonNode = smsObjectMapper.readTree(whatapResponse);
+        result.addAll(extractSms(smsJsonNode));
+        return result;
+    }
+
+    private List<String> getReceiversByPcode(int pcode) throws IOException {
+        List<String> result = new ArrayList<String>();
+        String memberListUrl = collector + "/open/api/json/project/" + pcode + "/members";
+        Request httpGetRequest = new Request.Builder()
+                .url(memberListUrl)
+                .addHeader("x-whatap-token", token)
+                .build();
+        Response okHttpResponse = okHttpClient.newCall(httpGetRequest).execute();
+        String whatapResponse = okHttpResponse.body().string();
+        ObjectMapper smsObjectMapper = new ObjectMapper();
+        JsonNode smsJsonNode = smsObjectMapper.readTree(whatapResponse);
+        result.addAll(extractSms(smsJsonNode));
+        return result;
+    }
+
+    public void send(WebhookDto dto, String groupId) throws IOException {
+
+        List<String> receivers = new ArrayList<String>();
+        String apiUrl = config.getString("webhook.endpoint.url", "http://inf.hanwhalife.com/esb:80");
 
         int pcode = dto.getPcode();
-        String token = config.getString("admin.token", "2DHTY8Z7FRDFNC8JVKEJ");
-        String collector = config.getString("server.collector.address",
-                "http://10.253.248.90:8080");
 
-        // 수집서버 API PULL
-        HttpClient httpClient = HttpClients.createDefault();
-        String memberListUrl = collector + "/open/api/json/project/" + pcode + "/members";
-        HttpGet httpGet = new HttpGet(memberListUrl);
-        httpGet.addHeader(new BasicHeader("x-whatap-token", token));
-
-        HttpResponse response = httpClient.execute(httpGet);
-        HttpEntity entity = response.getEntity();
-        String whatapResponse = EntityUtils.toString(entity);
+        // /webhook -> pcode로 프로젝트 멤버목록, /webhook/{groupId} -> groupId로 그룹 멤버목록
+        if (groupId != null) {
+            receivers.addAll(getReceiversByGroupId(groupId));
+        } else {
+            receivers.addAll(getReceiversByPcode(pcode));
+        }
 
         // Header 정의
         String trnmSysCode = config.getString("header.trnmsyscode", "APW");
@@ -77,101 +110,104 @@ public class SendJson {
         String onlnBtchDvsnCode = config.getString("onlnbtchdvsncode", "R");
         String dutySendYn = config.getString("dutysendyn", "Y");
 
-        // sms 추출
-        HttpURLConnection connection = (HttpURLConnection) new URL(apiUrl).openConnection();
-        connection.setRequestMethod("POST");
-        connection.setRequestProperty("Content-Type", "application/json");
-        // 반복호출허용
-        connection.setDoOutput(true);
+        Response finalResponse = null;
+
         try {
-            // 본문용
             ObjectMapper dataObjectMapper = new ObjectMapper();
             ObjectNode dataJsonNode = dataObjectMapper.createObjectNode();
-            // 휴대폰번호 추출용
-            ObjectMapper smsObjectMapper = new ObjectMapper();
-            JsonNode smsJsonNode = smsObjectMapper.readTree(whatapResponse);
 
-            List<String> smsList = extractSms(smsJsonNode);
-            String[] smsArray = smsList.toArray(new String[smsList.size()]);
-            
-            for (String sms : smsArray) {
-                try (OutputStream os = connection.getOutputStream()) {
-                // 매 건 새 값이 필요한 Header
-                LocalDateTime currentTime = LocalDateTime.now();
-                int randomNum = new Random().nextInt(9999);
-                String tlgrCretDttm = currentTime.format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS"));
-                String rndmNo = String.format("%04d", randomNum);
+            // 로깅 index 출력용
 
-                String hpTlphTlcmNo = "";
-                String hpTlphOfno = "";
-                String hpTlphSbno = "";
+            // Timestamp, RandomNum, digits는 매번 받아와야함
+            for (int index = 0; index < receivers.size(); index++) {
+                try {
+                    String sms = receivers.get(index);
 
-                // 하이픈을 기준으로 분리저장
-                String[] parts = sms.split("-");
-                if (parts.length == 3) {
-                    hpTlphTlcmNo = parts[0];
-                    hpTlphOfno = parts[1];
-                    hpTlphSbno = parts[2];
-                } else {
-                    // 하이픈이 없으면 3-4-4 자리로 끊어서 저장
-                    hpTlphTlcmNo = parts[0].substring(0, 3);
-                    hpTlphOfno = parts[0].substring(3, 7);
-                    hpTlphSbno = parts[0].substring(7);
+                    LocalDateTime currentTime = LocalDateTime.now();
+                    int randomNum = new Random().nextInt(9999);
+                    String tlgrCretDttm = currentTime.format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS"));
+                    String rndmNo = String.format("%04d", randomNum);
+
+                    String hpTlphTlcmNo = "";
+                    String hpTlphOfno = "";
+                    String hpTlphSbno = "";
+
+                    // 하이픈을 기준으로 분리저장
+                    String[] parts = sms.split("-");
+                    if (parts.length == 3) {
+                        hpTlphTlcmNo = parts[0];
+                        hpTlphOfno = parts[1];
+                        hpTlphSbno = parts[2];
+                    } else {
+                        // 하이픈이 없으면 3-4-4 자리로 끊어서 저장
+                        hpTlphTlcmNo = parts[0].substring(0, 3);
+                        hpTlphOfno = parts[0].substring(3, 7);
+                        hpTlphSbno = parts[0].substring(7);
+                    }
+                    // Header 삽입
+                    ObjectNode headerNode = dataObjectMapper.createObjectNode();
+                    headerNode.put("trnmSysCode", trnmSysCode);
+                    headerNode.put("ipAddr", ipAddr);
+                    headerNode.put("tlgrCretDttm", tlgrCretDttm);
+                    headerNode.put("rndmNo", rndmNo);
+                    headerNode.put("hsno", hsno);
+                    headerNode.put("prsnInfoIncsYn", prsnInfoIncsYn);
+                    headerNode.put("itfcId", itfcId);
+                    headerNode.put("rcveSrvcId", rcveSrvcId);
+                    headerNode.put("rcveSysCode", rcveSysCode);
+                    headerNode.put("serverType", serverType);
+                    headerNode.put("rspnDvsnCode", rspnDvsnCode);
+
+                    // Payload 삽입
+                    ObjectNode payloadNode = dataObjectMapper.createObjectNode();
+                    payloadNode.put("sendCont", sendCont);
+                    payloadNode.put("ntfcKindCode", ntfcKindCode);
+                    payloadNode.put("jobMsgeCntn", jobMsgeCntn);
+                    payloadNode.put("sndeDeptCode", sndeDeptCode);
+                    payloadNode.put("ntfcTmplCode", ntfcTmplCode);
+                    payloadNode.put("hpTlphTlcmNo", hpTlphTlcmNo);
+                    payloadNode.put("hpTlphOfno", hpTlphOfno);
+                    payloadNode.put("hpTlphSbno", hpTlphSbno);
+                    payloadNode.put("btchPrcsYn", btchPrcsYn);
+                    payloadNode.put("msgeTitlNm", msgeTitlNm);
+                    payloadNode.put("sndeTlphArcd", sndeTlphArcd);
+                    payloadNode.put("sndeTlphOfno", sndeTlphOfno);
+                    payloadNode.put("sndeTlphInno", sndeTlphInno);
+                    payloadNode.put("sbsnSendYn", sbsnSendYn);
+                    payloadNode.put("onlnBtchDvsnCode", onlnBtchDvsnCode);
+                    payloadNode.put("dutySendYn", dutySendYn);
+
+                    // ObjectNode dataJsonNode = dataObjectMapper.createObjectNode();
+                    dataJsonNode.set("header", headerNode);
+                    dataJsonNode.set("payload", payloadNode);
+
+                    String finalOutput = dataJsonNode.toPrettyString();
+
+                    // OkHttp를 사용한 POST 요청
+                    RequestBody requestBody = RequestBody.create(finalOutput, MediaType.get("application/json"));
+                    Request request = new Request.Builder()
+                            .url(apiUrl)
+                            .post(requestBody)
+                            .build();
+
+                    finalResponse = okHttpClient.newCall(request).execute();
+                    log.info("HTTP STATUS [" + (index + 1) + "] : " + finalResponse.code());
+                } catch (Exception e) {
+                    e.printStackTrace();
+                } finally {
+                    // 메모리 누수방지: Payload 전송
+                    if (finalResponse != null && finalResponse.body() != null) {
+                        finalResponse.body().close();
+                    }
                 }
-
-                // Header 삽입
-                ObjectNode headerNode = dataObjectMapper.createObjectNode();
-                headerNode.put("trnmSysCode", trnmSysCode);
-                headerNode.put("ipAddr", ipAddr);
-                headerNode.put("tlgrCretDttm", tlgrCretDttm);
-                headerNode.put("rndmNo", rndmNo);
-                headerNode.put("hsno", hsno);
-                headerNode.put("prsnInfoIncsYn", prsnInfoIncsYn);
-                headerNode.put("itfcId", itfcId);
-                headerNode.put("rcveSrvcId", rcveSrvcId);
-                headerNode.put("rcveSysCode", rcveSysCode);
-                headerNode.put("serverType", serverType);
-                headerNode.put("rspnDvsnCode", rspnDvsnCode);
-
-                dataJsonNode.set("header", headerNode);
-
-                // Payload 삽입
-                ObjectNode payloadNode = dataObjectMapper.createObjectNode();
-                payloadNode.put("sendCont", sendCont);
-                payloadNode.put("ntfcKindCode", ntfcKindCode);
-                payloadNode.put("jobMsgeCntn", jobMsgeCntn);
-                payloadNode.put("sndeDeptCode", sndeDeptCode);
-                payloadNode.put("ntfcTmplCode", ntfcTmplCode);
-                payloadNode.put("hpTlphTlcmNo", hpTlphTlcmNo);
-                payloadNode.put("hpTlphOfno", hpTlphOfno);
-                payloadNode.put("hpTlphSbno", hpTlphSbno);
-                payloadNode.put("btchPrcsYn", btchPrcsYn);
-                payloadNode.put("msgeTitlNm", msgeTitlNm);
-                payloadNode.put("sndeTlphArcd", sndeTlphArcd);
-                payloadNode.put("sndeTlphOfno", sndeTlphOfno);
-                payloadNode.put("sndeTlphInno", sndeTlphInno);
-                payloadNode.put("sbsnSendYn", sbsnSendYn);
-                payloadNode.put("onlnBtchDvsnCode", onlnBtchDvsnCode);
-                payloadNode.put("dutySendYn", dutySendYn);
-
-                dataJsonNode.set("payload", payloadNode);
-
-                String finalOutput = dataJsonNode.toPrettyString();
-                byte[] input = finalOutput.getBytes(StandardCharsets.UTF_8);
-                os.write(input, 0, input.length);
-                int responseCode = connection.getResponseCode();
-                log.info("HTTP STATUS: " + responseCode);
-                log.info(finalOutput);
-            } catch (Exception e) {
-                e.printStackTrace();
             }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
-    } finally {
-        connection.disconnect();
     }
-}
 
-    private static List<String> extractSms(JsonNode smsJsonNode) {
+    // 받아온 JSON에서 전화번호 추출
+    private List<String> extractSms(JsonNode smsJsonNode) {
         List<String> smsList = new ArrayList<>();
 
         JsonNode dataArray = smsJsonNode.get("data");

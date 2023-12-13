@@ -1,4 +1,4 @@
-package com.hanwha.smsapi;
+/* package com.hanwha.smsapi;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -19,12 +19,12 @@ import okhttp3.Response;
 import okhttp3.logging.HttpLoggingInterceptor;
 
 @Slf4j
-public class SendJsonPlain {
+public class SendJsonNoParam {
 
     public void send(WebhookDto dto) throws IOException {
 
         Config config = Config.getConfig();
-        String apiUrl = config.getString("webhook.endpoint.url", "https://webhook.site/");
+        String apiUrl = config.getString("webhook.endpoint.url", "http://inf.hanwhalife.com/esb:80");
 
         int pcode = dto.getPcode();
         String token = config.getString("admin.token", "2DHTY8Z7FRDFNC8JVKEJ");
@@ -32,8 +32,8 @@ public class SendJsonPlain {
 
         // 수집서버 API PULL
         OkHttpClient okHttpClient = new OkHttpClient.Builder()
-        .addInterceptor(new HttpLoggingInterceptor().setLevel(HttpLoggingInterceptor.Level.NONE))
-        .build();
+                .addInterceptor(new HttpLoggingInterceptor().setLevel(HttpLoggingInterceptor.Level.NONE))
+                .build();
 
         String memberListUrl = collector + "/open/api/json/project/" + pcode + "/members";
         Request httpGetRequest = new Request.Builder()
@@ -45,15 +45,16 @@ public class SendJsonPlain {
         String whatapResponse = okHttpResponse.body().string();
 
         // Header 정의
-        String trnmSysCode = config.getString("header.trnmsyscode", "APW");
-        String ipAddr = config.getString("header.ipaddr", "010253248090");
-        int hsno = 1;
-        String prsnInfoIncsYn = config.getString("header.prsninfoincsyn", "N");
-        String itfcId = config.getString("header.itfcid", "HLIAPW00001");
-        String rcveSrvcId = config.getString("header.rcvesrvcid", "iniCspdDvlmUmsSendMgmtPSI004c");
-        String rcveSysCode = config.getString("header.rcvesyscode", "INI");
-        String serverType = config.getString("header.servertype", "D");
-        String rspnDvsnCode = config.getString("reqorresp.code", "S");
+        // String trnmSysCode = config.getString("header.trnmsyscode", "APW");
+        // String ipAddr = config.getString("header.ipaddr", "010253248090");
+        // int hsno = 1;
+        // String prsnInfoIncsYn = config.getString("header.prsninfoincsyn", "N");
+        // String itfcId = config.getString("header.itfcid", "HLIAPW00001");
+        // String rcveSrvcId = config.getString("header.rcvesrvcid",
+        // "iniCspdDvlmUmsSendMgmtPSI004c");
+        // String rcveSysCode = config.getString("header.rcvesyscode", "INI");
+        // String serverType = config.getString("header.servertype", "D");
+        // String rspnDvsnCode = config.getString("reqorresp.code", "S");
 
         // Payload 정의
         String sendCont = "1";
@@ -70,6 +71,8 @@ public class SendJsonPlain {
         String onlnBtchDvsnCode = config.getString("onlnbtchdvsncode", "R");
         String dutySendYn = config.getString("dutysendyn", "Y");
 
+        Response finalResponse = null;
+
         try {
             ObjectMapper dataObjectMapper = new ObjectMapper();
             ObjectNode dataJsonNode = dataObjectMapper.createObjectNode();
@@ -80,7 +83,7 @@ public class SendJsonPlain {
             List<String> smsList = extractSms(smsJsonNode);
             String[] smsArray = smsList.toArray(new String[0]);
 
-            //로깅 index 출력용
+            // 로깅 index 출력용
             int index = 1;
 
             // Timestamp, RandomNum, digits는 매번 받아와야함
@@ -108,18 +111,20 @@ public class SendJsonPlain {
                         hpTlphSbno = parts[0].substring(7);
                     }
                     // Header 삽입
-                    ObjectNode headerNode = dataObjectMapper.createObjectNode();
-                    headerNode.put("trnmSysCode", trnmSysCode);
-                    headerNode.put("ipAddr", ipAddr);
-                    headerNode.put("tlgrCretDttm", tlgrCretDttm);
-                    headerNode.put("rndmNo", rndmNo);
-                    headerNode.put("hsno", hsno);
-                    headerNode.put("prsnInfoIncsYn", prsnInfoIncsYn);
-                    headerNode.put("itfcId", itfcId);
-                    headerNode.put("rcveSrvcId", rcveSrvcId);
-                    headerNode.put("rcveSysCode", rcveSysCode);
-                    headerNode.put("serverType", serverType);
-                    headerNode.put("rspnDvsnCode", rspnDvsnCode);
+                    // ObjectNode headerNode = dataObjectMapper.createObjectNode();
+                    // headerNode.put("trnmSysCode", trnmSysCode);
+                    // headerNode.put("ipAddr", ipAddr);
+                    // headerNode.put("tlgrCretDttm", tlgrCretDttm);
+                    // headerNode.put("rndmNo", rndmNo);
+                    // headerNode.put("hsno", hsno);
+                    // headerNode.put("prsnInfoIncsYn", prsnInfoIncsYn);
+                    // headerNode.put("itfcId", itfcId);
+                    // headerNode.put("rcveSrvcId", rcveSrvcId);
+                    // headerNode.put("rcveSysCode", rcveSysCode);
+                    // headerNode.put("serverType", serverType);
+                    // headerNode.put("rspnDvsnCode", rspnDvsnCode);
+
+                    createHeaderNode(config);
 
                     // Payload 삽입
                     ObjectNode payloadNode = dataObjectMapper.createObjectNode();
@@ -153,19 +158,28 @@ public class SendJsonPlain {
                             .post(requestBody)
                             .build();
 
-                    Response finalResponse = okHttpClient.newCall(request).execute();
+                    finalResponse = okHttpClient.newCall(request).execute();
                     log.info("HTTP STATUS " + index + ": " + finalResponse.code());
                 } catch (Exception e) {
                     e.printStackTrace();
+                } finally {
+                    // 메모리 누수방지: Payload 전송
+                    if (finalResponse != null && finalResponse.body() != null) {
+                        finalResponse.body().close();
+                    }
                 }
                 index++;
             }
         } finally {
-            // connection.disconnect();
+            // 메모리 누수방지: 초기 API GET요청
+            if (okHttpResponse != null && okHttpResponse.body() != null) {
+                okHttpResponse.body().close();
+            }
         }
     }
 
-    private static List<String> extractSms(JsonNode smsJsonNode) {
+    // 받아온 JSON에서 전화번호 추출
+    private List<String> extractSms(JsonNode smsJsonNode) {
         List<String> smsList = new ArrayList<>();
 
         JsonNode dataArray = smsJsonNode.get("data");
@@ -185,4 +199,64 @@ public class SendJsonPlain {
         }
         return smsList;
     }
-}
+
+    private ObjectNode createHeaderNode(Config config) {
+        ObjectMapper dataObjectMapper = new ObjectMapper();
+        ObjectNode headerNode = dataObjectMapper.createObjectNode();
+
+        LocalDateTime currentTime = LocalDateTime.now();
+        int randomNum = new Random().nextInt(9999);
+
+        String trnmSysCode = config.getString("header.trnmsyscode", "APW");
+        String ipAddr = config.getString("header.ipaddr", "010253248090");
+        String tlgrCretDttm = currentTime.format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS"));
+        String rndmNo = String.format("%04d", randomNum);
+        int hsno = 1;
+        String prsnInfoIncsYn = config.getString("header.prsninfoincsyn", "N");
+        String itfcId = config.getString("header.itfcid", "HLIAPW00001");
+        String rcveSrvcId = config.getString("header.rcvesrvcid", "iniCspdDvlmUmsSendMgmtPSI004c");
+        String rcveSysCode = config.getString("header.rcvesyscode", "INI");
+        String serverType = config.getString("header.servertype", "D");
+        String rspnDvsnCode = config.getString("reqorresp.code", "S");
+
+        headerNode.put("trnmSysCode", trnmSysCode);
+        headerNode.put("ipAddr", ipAddr);
+        headerNode.put("tlgrCretDttm", tlgrCretDttm);
+        headerNode.put("rndmNo", rndmNo);
+        headerNode.put("hsno", hsno);
+        headerNode.put("prsnInfoIncsYn", prsnInfoIncsYn);
+        headerNode.put("itfcId", itfcId);
+        headerNode.put("rcveSrvcId", rcveSrvcId);
+        headerNode.put("rcveSysCode", rcveSysCode);
+        headerNode.put("serverType", serverType);
+        headerNode.put("rspnDvsnCode", rspnDvsnCode);
+
+        return headerNode;
+    }
+
+    private ObjectNode createPayloadNode(WebhookDto dto, String digits, Config config) {
+        ObjectMapper dataObjectMapper = new ObjectMapper();
+        ObjectNode payloadNode = dataObjectMapper.createObjectNode();
+
+        // Payload 정의
+        String sendCont = "1";
+        String ntfcKindCode = config.getString("payload.ntfckindcode", "ZAC9001");
+        String jobMsgeCntn = dto.getMessage();
+        String sndeDeptCode = config.getString("payload.sndedeptcode", "00025");
+        String ntfcTmplCode = config.getString("payload.ntfctmplcode", "AZAC000015");
+        String btchPrcsYn = config.getString("payload.btchprcsyn", "1");
+        String msgeTitlNm = config.getString("payload.msgetitlnm", "Whatap Event Alert");
+        String sndeTlphArcd = config.getString("payload.sndetlpharcd", "");
+        String sndeTlphOfno = config.getString("payload.sndetlphofno", "1588");
+        String sndeTlphInno = config.getString("payload.sndetlphinno", "6363");
+        String sbsnSendYn = config.getString("payload.sbsnsendyn", "N");
+        String onlnBtchDvsnCode = config.getString("onlnbtchdvsncode", "R");
+        String dutySendYn = config.getString("dutysendyn", "Y");
+
+        payloadNode.put("sendCont", "1");
+        payloadNode.put("ntfcKindCode", config.getString("payload.ntfckindcode", "ZAC9001"));
+
+        return payloadNode;
+    }
+
+} */

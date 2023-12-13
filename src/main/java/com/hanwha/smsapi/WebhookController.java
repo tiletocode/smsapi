@@ -6,6 +6,7 @@ import org.springframework.context.annotation.PropertySource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -25,11 +26,20 @@ public class WebhookController {
         return new ResponseEntity<>("There is no service for GET method.", HttpStatus.METHOD_NOT_ALLOWED);
     }
 
-    @PostMapping("${webhook.server.uri:/webhook}")
+    @PostMapping("/webhook")
     public ResponseEntity<String> webhook(@RequestBody WebhookDto dto) throws IOException {
         dto.nullReplace(dto);
-        SendJsonPlain sj = new SendJsonPlain();
-        sj.send(dto);
+        SendJson sj = new SendJson();
+        sj.send(dto, null);
+        return new ResponseEntity<>("Receive Complete.", HttpStatus.OK);
+    }
+
+    @PostMapping("/webhook/{groupId}")
+    public ResponseEntity<String> webhookParam(@RequestBody WebhookDto dto, @PathVariable String groupId)
+            throws IOException {
+        dto.nullReplace(dto);
+        SendJson sj = new SendJson();
+        sj.send(dto, groupId);
         return new ResponseEntity<>("Receive Complete.", HttpStatus.OK);
     }
 }
