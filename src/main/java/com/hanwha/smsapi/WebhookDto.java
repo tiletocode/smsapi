@@ -30,4 +30,20 @@ public class WebhookDto {
       dto.setMessage(nullReplace);
     }
   }
+
+  public void nodata(WebhookDto dto) {
+    if (dto.getMetricName() == "nodata") {
+      String originMessage = dto.getMessage();
+      String hostName = dto.getOname() + ": ";
+      dto.setMessage(hostName + originMessage);
+    }
+  }
+
+  public void restart(WebhookDto dto) {
+    if (dto.getMetricName() == "restart") {
+      String originMessage = dto.getMessage();
+      String hostName = dto.getOname() + ": ";
+      dto.setMessage(hostName + originMessage);
+    }
+  }
 }

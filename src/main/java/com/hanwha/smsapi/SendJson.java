@@ -98,8 +98,9 @@ public class SendJson {
         // Payload 정의
         String sendCont = "1";
         String ntfcKindCode = config.getString("payload.ntfckindcode", "ZAC9001");
-        String prefixCntn = config.getString("payload.prefixcntn", "[Whatap-모니터링 알림]\\n");
-        String jobMsgeCntn = prefixCntn + dto.getMessage();
+        String prefixCntn = config.getString("payload.prefixcntn", "[Whatap-모니터링 알림]\n");
+        String eventTime = "[" + StringUtils.formatDate(dto.getTime(), Config.getConfig().getString("webhook.message.date.format", "yyyy-MM-dd HH:mm:ss")) + "] ";
+        String jobMsgeCntn = prefixCntn + eventTime + dto.getMessage();
         String sndeDeptCode = config.getString("payload.sndedeptcode", "00025");
         String ntfcTmplCode = config.getString("payload.ntfctmplcode", "AZAC000015");
         String btchPrcsYn = config.getString("payload.btchprcsyn", "1");
@@ -182,7 +183,7 @@ public class SendJson {
                     dataJsonNode.set("header", headerNode);
                     dataJsonNode.set("payload", payloadNode);
 
-                    String finalOutput = dataJsonNode.toString();
+                    String finalOutput = dataJsonNode.toPrettyString();
 
                     // OkHttp를 사용한 POST 요청
                     RequestBody requestBody = RequestBody.create(finalOutput, MediaType.get("application/json"));
