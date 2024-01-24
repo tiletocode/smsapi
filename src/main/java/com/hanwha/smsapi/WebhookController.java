@@ -30,6 +30,9 @@ public class WebhookController {
     public ResponseEntity<String> webhook(@RequestBody WebhookDto dto) throws IOException {
         dto.nullReplace(dto);
         SendJson sj = new SendJson();
+        // 이벤트 기본 템플릿의 restart, nodata의 message에 oname 강제삽입
+        dto.restart(dto);
+        dto.nodata(dto);
         sj.send(dto, null);
         return new ResponseEntity<>("Receive Complete.", HttpStatus.OK);
     }

@@ -32,7 +32,7 @@ public class WebhookDto {
   }
 
   public void nodata(WebhookDto dto) {
-    if (dto.getMetricName() == "nodata") {
+    if (dto.metricName.equals("nodata")) {
       String originMessage = dto.getMessage();
       String hostName = dto.getOname() + ": ";
       dto.setMessage(hostName + originMessage);
@@ -40,7 +40,7 @@ public class WebhookDto {
   }
 
   public void restart(WebhookDto dto) {
-    if (dto.getMetricName() == "restart") {
+    if (dto.getMetricName().equals("restart")) {
       String originMessage = dto.getMessage();
       String hostName = dto.getOname() + ": ";
       dto.setMessage(hostName + originMessage);
