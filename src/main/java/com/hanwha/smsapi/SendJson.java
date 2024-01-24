@@ -98,9 +98,30 @@ public class SendJson {
         // Payload 정의
         String sendCont = "1";
         String ntfcKindCode = config.getString("payload.ntfckindcode", "ZAC9001");
+        
         String prefixCntn = config.getString("payload.prefixcntn", "[Whatap-모니터링 알림]\n");
-        String eventTime = "[" + StringUtils.formatDate(dto.getTime(), Config.getConfig().getString("webhook.message.date.format", "yyyy-MM-dd HH:mm:ss")) + "] ";
-        String jobMsgeCntn = prefixCntn + eventTime + dto.getMessage();
+        String eventTime = "[" + StringUtils.formatDate(dto.getTime(), Config.getConfig().getString("webhook.message.date.format", "yyyy-MM-dd HH:mm:ss")) + "]";
+        
+        // jobMsgeCntn 요소 순서 동적정의
+        String outFormat = config.getString("webhook.message.format", "#prefix#time#projectName#message");
+        outFormat = StringUtils.replace(outFormat, "#prefix", prefixCntn);
+        outFormat = StringUtils.replace(outFormat, "#time", eventTime);
+        outFormat = StringUtils.replace(outFormat, "#projectName", "[" + dto.getProjectName() + "]");
+        outFormat = StringUtils.replace(outFormat, "#message", dto.getMessage());
+
+        // 현재 사용하지 않는 필드도 일단 선언
+        outFormat = StringUtils.replace(outFormat, "#pcode", dto.getPcode());
+        outFormat = StringUtils.replace(outFormat, "#oid", dto.getOid());
+        outFormat = StringUtils.replace(outFormat, "#oname", dto.getOname());
+        outFormat = StringUtils.replace(outFormat, "#title", dto.getTitle());
+        outFormat = StringUtils.replace(outFormat, "#level", dto.getLevel());
+        outFormat = StringUtils.replace(outFormat, "#status", dto.getStatus());
+        outFormat = StringUtils.replace(outFormat, "#metricName", dto.getMetricName());
+        outFormat = StringUtils.replace(outFormat, "#metricValue", dto.getMetricValue());
+        outFormat = StringUtils.replace(outFormat, "#metricThreshold", dto.getMetricThreshold());
+
+        String jobMsgeCntn = outFormat;
+
         String sndeDeptCode = config.getString("payload.sndedeptcode", "00025");
         String ntfcTmplCode = config.getString("payload.ntfctmplcode", "AZAC000015");
         String btchPrcsYn = config.getString("payload.btchprcsyn", "1");
