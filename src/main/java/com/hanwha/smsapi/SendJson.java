@@ -40,7 +40,7 @@ public class SendJson {
                 .build();
     }
 
-    private List<String> getReceiversByGroupId(String groupId) throws IOException{
+    private List<String> getReceiversByGroupId(String groupId) throws IOException {
         List<String> result = new ArrayList<String>();
         String groupListUrl = collector + "/open/api/json/group/" + groupId + "/members";
         Request httpGetRequest = new Request.Builder()
@@ -205,6 +205,7 @@ public class SendJson {
                     dataJsonNode.set("payload", payloadNode);
 
                     String finalOutput = dataJsonNode.toPrettyString();
+                    log.info(finalOutput);
 
                     // OkHttp를 사용한 POST 요청
                     RequestBody requestBody = RequestBody.create(finalOutput, MediaType.get("application/json"));

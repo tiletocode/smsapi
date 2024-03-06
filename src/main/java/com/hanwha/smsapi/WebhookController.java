@@ -28,11 +28,11 @@ public class WebhookController {
 
     @PostMapping("/webhook")
     public ResponseEntity<String> webhook(@RequestBody WebhookDto dto) throws IOException {
+        // null값에 empty_value 문자열 치환
         dto.nullReplace(dto);
-        SendJson sj = new SendJson();
         // 이벤트 기본 템플릿의 restart, nodata의 message에 oname 강제삽입
-        dto.restart(dto);
-        dto.nodata(dto);
+        dto.infraBasicTemplateAddOname(dto);
+        SendJson sj = new SendJson();
         sj.send(dto, null);
         return new ResponseEntity<>("Receive Complete.", HttpStatus.OK);
     }
@@ -40,11 +40,10 @@ public class WebhookController {
     @PostMapping("/webhook/{groupId}")
     public ResponseEntity<String> webhookParam(@RequestBody WebhookDto dto, @PathVariable String groupId)
             throws IOException {
+        // null값에 empty_value 문자열 치환
         dto.nullReplace(dto);
-        
         // 이벤트 기본 템플릿의 restart, nodata의 message에 oname 강제삽입
-        dto.restart(dto);
-        dto.nodata(dto);
+        dto.infraBasicTemplateAddOname(dto);
         SendJson sj = new SendJson();
         sj.send(dto, groupId);
         return new ResponseEntity<>("Receive Complete.", HttpStatus.OK);

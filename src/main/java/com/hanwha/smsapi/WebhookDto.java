@@ -52,19 +52,11 @@ public class WebhookDto {
     }
   }
 
-  public void nodata(WebhookDto dto) {
-    if (dto.metricName.equals("nodata")) {
-      String originMessage = dto.getMessage();
-      String hostName = "[" + dto.getOname() + "] ";
-      dto.setMessage(hostName + originMessage);
-    }
-  }
-
-  public void restart(WebhookDto dto) {
-    if (dto.getMetricName().equals("restart")) {
-      String originMessage = dto.getMessage();
-      String hostName = "[" + dto.getOname() + "] ";
-      dto.setMessage(hostName + originMessage);
+  public void infraBasicTemplateAddOname(WebhookDto dto) {
+    String originMessage = dto.getMessage();
+    String hostName = "[" + dto.getOname() + "] ";
+    if (dto.getMetricName().equals("nodata") || dto.getMetricName().equals("uptime")) {
+      dto.setMessage(hostName + originMessage); 
     }
   }
 }
